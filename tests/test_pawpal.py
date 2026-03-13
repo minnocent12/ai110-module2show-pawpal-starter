@@ -66,19 +66,24 @@ def test_scheduler_skips_completed_tasks():
     scheduled_names = [t.name for t in plan.scheduled_tasks]
     assert "Walk" not in scheduled_names
     assert "Feeding" in scheduled_names
+    
+# --- Test 6: scheduler prioritizes higher-priority tasks within limited time ---
+def test_scheduler_respects_priority_with_limited_time():
+    owner = Owner("Jordan", 25, {})
+    pet = make_pet()
+    owner.add_pet(pet)
 
+    pet.add_task(make_task("High Priority Walk", 20, 1))   # high priority
+    pet.add_task(make_task("Medium Grooming", 10, 2))      # medium priority
+    pet.add_task(make_task("Low Playtime", 5, 3))          # low priority
 
-if __name__ == "__main__":
-    tests = [
-        test_mark_complete_sets_completed,
-        test_mark_incomplete_resets_completed,
-        test_add_task_increases_task_count,
-        test_add_duplicate_task_rejected,
-        test_scheduler_skips_completed_tasks,
-    ]
-    for test in tests:
-        try:
-            test()
-            print(f"  PASS  {test.__name__}")
-        except AssertionError as e:
-            print(f"  FAIL  {test.__name__}: {e}")
+    scheduler = Scheduler(owner)
+    plan = scheduler.generate_daily_plan(owner.get_all_tasks(), owner.available_time_per_day)
+
+    scheduled_names = [task.name for task in plan.scheduled_tasks]
+    skipped_names = [task.name for task, _ in plan.unscheduled_tasks]
+
+    assert "High Priority Walk" in scheduled_names
+    assert "Low Playtime" in scheduled_names
+    assert "Medium Grooming" in skipped_names
+    assert plan.total_time_used == 25
