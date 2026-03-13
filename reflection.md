@@ -56,8 +56,15 @@ After reviewing the initial design, several structural issues were identified th
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+**Tradeoff: exact start-time collision detection instead of overlapping-duration detection**
+
+The conflict detector (`Scheduler.detect_conflicts`) flags a conflict only when two tasks share the *exact same* HH:MM start time (e.g., both set to `"08:00"`). It does *not* check whether a task's duration would cause it to run into the start of a later task — for example, a 30-minute task at `07:45` and a task at `08:00` would overlap in reality, but the scheduler would not warn about it.
+
+**Why this happens:** Duration-overlap detection requires computing each task's end time (`start + duration`) and then comparing every pair of tasks to see whether any two intervals intersect. That is an O(n²) interval-overlap problem and needs validated HH:MM times on *every* task, not just some of them.
+
+**Why the simpler check is reasonable here:** PawPal+ is a personal, low-stakes daily planner. Most pet care tasks — feeding, a walk, administering medication — do not need to be scheduled to the minute. The owner sets a `preferred_time` slot (morning / afternoon / evening) as a rough guideline, and only optionally pins a task to an exact clock time. Detecting a direct double-booking at the same minute is the most common, actionable mistake; flagging every soft overlap would produce too many warnings and make the tool feel aggressive. The tradeoff keeps the conflict logic simple, fast, and understandable while still catching the clearest scheduling mistakes.
+
+**What would be needed to fix it:** Store a validated `time` on every task (not optional), compute `end_time = start + timedelta(minutes=duration)`, sort tasks by start time, then use a single linear scan to check whether each task's start is before the previous task's end. This is the classic interval-scheduling sweep and would be a natural next iteration.
 
 ---
 
