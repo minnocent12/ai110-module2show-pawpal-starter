@@ -15,13 +15,35 @@ The three core actions a user should be able to perform in PawPal+:
 
 **b. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+The initial design uses five classes organized in a clear dependency hierarchy:
+
+- **Task** — The smallest unit of work. Holds everything needed to describe one care activity: name, category, duration, priority, optional preferred time, recurrence flag, notes, and a completed status. Responsible for validating itself and reporting whether it is high priority.
+
+- **Pet** — Represents a specific animal being cared for. Owns a list of Task objects and is responsible for adding, removing, editing, and retrieving them. Also holds profile data (species, age, special notes) and can produce a readable summary.
+
+- **Owner** — Represents the app user. Owns a list of Pet objects and holds the key scheduling constraint: how many minutes are available per day. Also stores preferences such as preferred walk times. Responsible for managing pets and updating time/preference settings.
+
+- **Scheduler** — The decision-making engine. Takes an Owner and a list of Tasks, then sorts by priority, filters to what fits in the available time budget, and returns a DailyPlan. Also responsible for generating a plain-language explanation of the scheduling decisions.
+
+- **DailyPlan** — The output object produced by the Scheduler. Holds two lists: scheduled tasks and unscheduled tasks (each paired with a skip reason). Tracks total time used versus available, stores explanation strings, and formats the result for display in the UI.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+After reviewing the initial design, several structural issues were identified that would likely surface during implementation:
+
+1. **Orphaned `Scheduler.tasks` list** — The `Scheduler` holds its own `self.tasks` list separate from the tasks stored on each `Pet`. This creates two sources of truth that can diverge. The scheduler should derive its task list from `owner.pets` at scheduling time rather than maintaining a shadow copy.
+
+2. **Missing task aggregation step** — `generate_daily_plan` accepts a `tasks` parameter, but nothing in the design is responsible for collecting tasks across all pets before calling it. `Owner` needs an `get_all_tasks()` method (or equivalent) to bridge this gap, otherwise the caller must know to do it manually.
+
+3. **`DailyPlan` has no date field and no pet context** — Without a date, plans cannot be distinguished from each other. Without a reference to which pet each task belongs to, the plan output cannot display something like "Walk Buddy." Either `Task` needs a `pet_name` field, or `scheduled_tasks` should store `(Task, Pet)` tuples.
+
+4. **`preferred_time` is stored but never used in scheduling** — `Task` has a `preferred_time` field, but neither `Scheduler.sort_tasks_by_priority` nor `filter_tasks_that_fit` accounts for it. Time-slot awareness would need to be added for this field to have any effect.
+
+5. **`available_time_per_day` is a single integer** — Treating the day as one uninterrupted block limits scheduling realism. A future iteration could represent availability as a list of time windows instead.
+
+6. **`Task.priority` has no defined scale** — Using a raw `int` makes `is_high_priority()` ambiguous. Replacing it with an `Enum` (e.g., `LOW=1, MEDIUM=2, HIGH=3`) would make the threshold explicit and prevent invalid values.
+
+7. **`DailyPlan.explanations` and `Scheduler.explain_plan` overlap** — Explanation logic is split between the plan object and the scheduler. Consolidating this to one place would prevent inconsistency.
 
 ---
 

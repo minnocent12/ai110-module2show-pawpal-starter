@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Any
+from datetime import date
 
 class Owner:
     def __init__(self, name: str, available_time_per_day: int, preferences: Dict[str, Any]):
@@ -21,6 +22,9 @@ class Owner:
         pass
 
     def update_preferences(self, preferences: Dict[str, Any]):
+        pass
+
+    def get_all_tasks(self) -> List['Task']:
         pass
 
 
@@ -81,7 +85,6 @@ class Pet:
 class Scheduler:
     def __init__(self, owner: Owner):
         self.owner: Owner = owner
-        self.tasks: List[Task] = []
 
     def generate_daily_plan(self, tasks: List[Task], available_time: int) -> 'DailyPlan':
         pass
@@ -97,7 +100,8 @@ class Scheduler:
 
 
 class DailyPlan:
-    def __init__(self, total_time_available: int):
+    def __init__(self, total_time_available: int, plan_date: date = None):
+        self.plan_date: date = plan_date
         self.scheduled_tasks: List[Task] = []
         self.unscheduled_tasks: List[Tuple[Task, str]] = []
         self.total_time_used: int = 0
