@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from datetime import date, timedelta
 from pawpal_system import Owner, Pet, Task, Scheduler
 
 
@@ -87,3 +88,65 @@ def test_scheduler_respects_priority_with_limited_time():
     assert "Low Playtime" in scheduled_names
     assert "Medium Grooming" in skipped_names
     assert plan.total_time_used == 25
+
+
+# --- Test 7: sort_by_time returns tasks in chronological HH:MM order ---
+def test_sort_by_time_returns_chronological_order():
+    owner = Owner("Jordan", 120, {})
+    scheduler = Scheduler(owner)
+
+    evening  = Task(name="Evening Walk",   category="exercise", duration=20, priority=2, time="18:00")
+    morning  = Task(name="Morning Feed",   category="feeding",  duration=10, priority=1, time="07:30")
+    midday   = Task(name="Midday Meds",    category="health",   duration=5,  priority=1, time="12:15")
+
+    sorted_tasks = scheduler.sort_by_time([evening, morning, midday])
+
+    assert [t.name for t in sorted_tasks] == [
+        "Morning Feed",
+        "Midday Meds",
+        "Evening Walk",
+    ]
+
+
+# --- Test 8: marking a daily task complete schedules it for the next day ---
+def test_daily_recurring_task_due_tomorrow_after_completion():
+    task = Task(
+        name="Daily Walk",
+        category="exercise",
+        duration=30,
+        priority=1,
+        recurrence_interval="daily",
+    )
+
+    task.mark_complete()
+
+    # completed flag is set and last_completed_date recorded
+    assert task.completed is True
+    assert task.last_completed_date == date.today()
+
+    # next occurrence is exactly one day away
+    assert task.next_due_date == date.today() + timedelta(days=1)
+
+    # task must NOT appear in today's plan (it was just done)
+    assert task.is_due_today() is False
+
+
+# --- Test 9: detect_conflicts flags tasks with the same explicit start time ---
+def test_detect_conflicts_flags_duplicate_start_times():
+    owner = Owner("Jordan", 120, {})
+    pet = Pet(name="Mochi", species="dog", age=3, notes="")
+    owner.add_pet(pet)
+
+    # Two different tasks assigned the same HH:MM slot
+    task_a = Task(name="Morning Feed",  category="feeding",  duration=10, priority=1, time="08:00")
+    task_b = Task(name="Morning Meds",  category="health",   duration=5,  priority=1, time="08:00")
+    pet.add_task(task_a)
+    pet.add_task(task_b)
+
+    scheduler = Scheduler(owner)
+    conflicts = scheduler.detect_conflicts(owner.get_all_tasks())
+
+    # At least one conflict message must mention the clashing time
+    assert any("08:00" in msg for msg in conflicts), (
+        f"Expected a conflict at 08:00 but got: {conflicts}"
+    )

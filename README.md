@@ -63,6 +63,36 @@ This runs a scripted scenario that adds tasks out of order across two pets, then
 
 ---
 
+## Testing PawPal+
+
+### Run the test suite
+
+```bash
+python3 -m pytest tests/test_pawpal.py -v
+```
+
+### What the tests cover
+
+| # | Test | Behavior verified |
+|---|---|---|
+| 1 | `test_mark_complete_sets_completed` | `mark_complete()` flips `completed` to `True` |
+| 2 | `test_mark_incomplete_resets_completed` | `mark_incomplete()` resets `completed` back to `False` |
+| 3 | `test_add_task_increases_task_count` | Adding valid tasks grows the pet's task list |
+| 4 | `test_add_duplicate_task_rejected` | Duplicate task names are rejected; list stays at 1 |
+| 5 | `test_scheduler_skips_completed_tasks` | `generate_daily_plan` never re-schedules a completed non-recurring task |
+| 6 | `test_scheduler_respects_priority_with_limited_time` | With a tight time budget, the highest-priority tasks are scheduled first and lower-priority tasks are skipped |
+| 7 | `test_sort_by_time_returns_chronological_order` | `sort_by_time` orders tasks by ascending HH:MM regardless of insertion order |
+| 8 | `test_daily_recurring_task_due_tomorrow_after_completion` | Completing a daily task sets `last_completed_date` to today, `next_due_date` to tomorrow, and `is_due_today()` to `False` |
+| 9 | `test_detect_conflicts_flags_duplicate_start_times` | `detect_conflicts` surfaces a warning when two tasks share the same explicit start time |
+
+### Confidence Level
+
+**★★★★☆ (4 / 5)**
+
+The core scheduling contract — priority sorting, time-budget enforcement, recurring-task gating, and conflict detection — is exercised by the suite and all 9 tests pass. The main gap is the absence of integration-level tests through the Streamlit UI layer and edge cases such as weekly recurrence, the `filter_tasks_that_fit` greedy knapsack, and the `reset_recurring_tasks` reset path. Covering those scenarios would push confidence to 5 stars.
+
+---
+
 ## Getting started
 
 ### Setup
