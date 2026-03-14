@@ -84,7 +84,14 @@ if add_pet:
 if owner.pets:
     st.markdown("**Pets:**")
     for pet in owner.pets:
-        st.text(pet.summary())
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.text(pet.summary())
+        with col2:
+            if st.button("Remove", key=f"remove_pet_{pet.name}"):
+                owner.remove_pet(pet.name)
+                st.session_state.plan = None
+                st.rerun()
 
 st.divider()
 
@@ -141,19 +148,90 @@ else:
     for pet in owner.pets:
         if pet.tasks:
             st.markdown(f"**{pet.name}'s tasks:**")
-            rows = []
-            for t in pet.tasks:
-                rows.append({
-                    "Task": t.name,
-                    "Category": t.category,
-                    "Duration (min)": t.duration,
-                    "Priority": {1: "high", 2: "medium", 3: "low"}.get(t.priority),
-                    "Preferred Slot": t.preferred_time,
-                    "Exact Time": t.time if t.time else "-",
-                    "Recurring": t.recurrence_interval if t.recurrence_interval else "no",
-                    "Done": "Yes" if t.completed else "No",
-                })
-            st.table(rows)
+
+            for task in pet.tasks:
+
+                col1, col2, col3 = st.columns([5, 1, 1])
+
+                with col1:
+                    st.write(
+                        f"**{task.name}** | {task.category} | {task.duration} min | "
+                        f"priority={task.priority} | {task.preferred_time}"
+                    )
+
+                with col2:
+                    completed = st.checkbox(
+                        "Done",
+                        value=task.completed,
+                        key=f"{pet.name}_{task.name}"
+                    )
+
+                    if completed and not task.completed:
+                        task.mark_complete()
+                        st.session_state.plan = None
+                        st.rerun()
+
+                    if not completed and task.completed:
+                        task.mark_incomplete()
+                        st.session_state.plan = None
+                        st.rerun()
+
+                with col3:
+                    if st.button("Remove", key=f"remove_task_{pet.name}_{task.name}"):
+                        pet.remove_task(task.name)
+                        st.session_state.plan = None
+                        st.rerun()
+
+                with st.expander(f"Edit {task.name}"):
+                    _priority_labels = ["high", "medium", "low"]
+                    _priority_map = {"high": 1, "medium": 2, "low": 3}
+                    _priority_rev = {1: "high", 2: "medium", 3: "low"}
+                    _slot_options = ["morning", "afternoon", "evening"]
+                    _recurrence_options = ["none", "daily", "weekly"]
+
+                    with st.form(key=f"edit_{pet.name}_{task.name}"):
+                        e_name = st.text_input("Task name", value=task.name)
+                        e_category = st.text_input("Category", value=task.category)
+                        ec1, ec2, ec3 = st.columns(3)
+                        with ec1:
+                            e_duration = st.number_input("Duration (min)", min_value=1, max_value=240, value=task.duration)
+                        with ec2:
+                            e_priority_label = st.selectbox(
+                                "Priority", _priority_labels,
+                                index=_priority_labels.index(_priority_rev.get(task.priority, "medium"))
+                            )
+                        with ec3:
+                            e_slot = st.selectbox(
+                                "Preferred time", _slot_options,
+                                index=_slot_options.index(task.preferred_time) if task.preferred_time in _slot_options else 0
+                            )
+                        e_time = st.text_input("Exact start time (HH:MM, optional)", value=task.time)
+                        _cur_recurrence = task.recurrence_interval if task.recurrence_interval else "none"
+                        e_recurrence = st.selectbox(
+                            "Recurrence", _recurrence_options,
+                            index=_recurrence_options.index(_cur_recurrence)
+                        )
+                        e_notes = st.text_input("Notes (optional)", value=task.notes)
+                        save_edit = st.form_submit_button("Save changes")
+
+                    if save_edit:
+                        _orig_name = task.name
+                        _updated = pet.edit_task(
+                            _orig_name,
+                            name=e_name,
+                            category=e_category,
+                            duration=int(e_duration),
+                            priority=_priority_map[e_priority_label],
+                            preferred_time=e_slot,
+                            time=e_time.strip(),
+                            recurrence_interval="" if e_recurrence == "none" else e_recurrence,
+                            notes=e_notes,
+                        )
+                        if _updated:
+                            st.session_state.plan = None
+                            st.rerun()
+                        else:
+                            st.error("Could not save — name and category must not be empty.")
 
 st.divider()
 
@@ -243,6 +321,15 @@ st.subheader("Generate Daily Plan")
 if not all_tasks:
     st.info("Add at least one task before generating a plan.")
 else:
+    if st.button("Reset recurring tasks"):
+        reset_names = scheduler.reset_recurring_tasks()
+        if reset_names:
+            st.session_state.plan = None
+            st.success(f"Reset {len(reset_names)} recurring task(s): {', '.join(reset_names)}")
+            st.rerun()
+        else:
+            st.info("No recurring tasks were due for reset.")
+
     if st.button("Generate schedule"):
         st.session_state.plan = scheduler.generate_daily_plan(
             all_tasks,
@@ -253,11 +340,7 @@ else:
         plan = st.session_state.plan
 
         st.markdown(f"**{owner.name}'s plan — {plan.plan_date}**")
-        st.caption(
-            f"Time available: {plan.total_time_available} min  |  "
-            f"Time used: {plan.total_time_used} min  |  "
-            f"Free: {plan.total_time_available - plan.total_time_used} min"
-        )
+        st.caption(plan.get_summary())
 
         if plan.scheduled_tasks:
             st.markdown("**Scheduled tasks:**")
@@ -289,5 +372,4 @@ else:
             st.table(unscheduled_rows)
 
         with st.expander("Why was each task chosen?"):
-            for explanation in plan.explanations:
-                st.write(f"- {explanation}")
+            st.text(scheduler.explain_plan(plan))
